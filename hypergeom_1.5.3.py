@@ -125,13 +125,15 @@ if __name__ == '__main__':
             w.writerow(('Gene Symbol', 'Average LFC', 'Average -log(p-values)', 'Number of perturbations', 'Perturbations', 'Individual LFCs', 'Ascending ranks','Individual ascending -log(p-values)', 'Descending ranks', 'Individual descending -log(p-values)'))
             print 'Analyzing '+c
             for g in ge:
-                in_lfcs, avg_lfc, p_p_vals, avg_p_val, guide_list, ranks_p = g_p_val_P[g].split('_')
-                in_lfcs, avg_lfc, n_p_vals, avg_n_val, guide_list, ranks_n = g_p_val_N[g].split('_')
+                in_lfcs, avg_lfc_p, p_p_vals, avg_p_val, guide_list, ranks_p = g_p_val_P[g].split('_')
+                in_lfcs, avg_lfc_n, n_p_vals, avg_n_val, guide_list, ranks_n = g_p_val_N[g].split('_')
 
                 if float(avg_p_val) > float(avg_n_val):
                     avg_p_val = float(avg_p_val)
+                    avg_lfc = float(avg_lfc_p)
                 else:
                     avg_p_val = float(avg_n_val)
+                    avg_lfc = float(avg_lfc_n)
                 if include == 'N':
                     if len(guide_list.split(';')) != 1:
                         w.writerow((g, avg_lfc, avg_p_val, len(in_lfcs.split(';')), guide_list, in_lfcs, ranks_n, n_p_vals, ranks_p, p_p_vals))
@@ -139,7 +141,7 @@ if __name__ == '__main__':
                     w.writerow((g, avg_lfc, avg_p_val, len(in_lfcs.split(';')), guide_list, in_lfcs, ranks_n, n_p_vals, ranks_p, p_p_vals))  
     with open(o_folder+'/README.txt','w') as o:
         w = csv.writer(o,delimiter='\t')
-        w.writerow((['Code Version: 1.5.2']))
+        w.writerow((['Code Version: 1.5.3']))
         w.writerow((['Input file:'+inputfile]))
         w.writerow((['Chip file:'+args.chip_file]))
         w.writerow((['Output folder:'+o_folder]))
