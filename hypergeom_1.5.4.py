@@ -78,6 +78,7 @@ def calc_hypergeom_scores(merged, st_in, ge, frac):
         #op_lfcs = ';'.join([str(l) for l in lfcs])
         all_ranks = ';'.join(str(r) for r in rank)
         p_values = [-log10(stats.hypergeom.pmf(rank.index(x)+1, tot_sps, length_sps, x)) for x in rank]
+        p_values.sort(reverse=True)
         num_perts = int(frac/100.0*length_sps)
         avg_p_val = np.mean(p_values[0:num_perts])
         avg_lfc = np.mean(lfcs[0:num_perts])
@@ -141,7 +142,7 @@ if __name__ == '__main__':
                     w.writerow((g, avg_lfc, avg_p_val, len(in_lfcs.split(';')), guide_list, in_lfcs, ranks_n, n_p_vals, ranks_p, p_p_vals))  
     with open(o_folder+'/README.txt','w') as o:
         w = csv.writer(o,delimiter='\t')
-        w.writerow((['Code Version: 1.5.3']))
+        w.writerow((['Code Version: 1.5.4']))
         w.writerow((['Input file:'+inputfile]))
         w.writerow((['Chip file:'+args.chip_file]))
         w.writerow((['Output folder:'+o_folder]))
