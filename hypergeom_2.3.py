@@ -6,6 +6,10 @@ Input: 1. Input file with column headers
        2. Chip File
        3. Option to include/exclude singletons in output file;Default: Singletons included
        4. Option to specify n% for mean p-val, LFC calculation
+       5. Option of number of control guides to be included in a random set
+       6. Option of minimum number of perturbations for a gene to be included in the volcano plot
+       7. Option of maximum number of perturbations for a gene to be included in the volcano plot
+       8. Option of number of genes to be labeled on the plot
 '''
 import pandas as pd
 import numpy as np
@@ -14,6 +18,17 @@ from math import log10
 import csv, argparse, os, sys, re
 from datetime import datetime
 from decimal import Decimal
+import matplotlib as mpl
+mpl.use('Agg')
+mpl.rc('pdf',fonttype=42)
+mpl.rcParams['ps.useafm'] = True
+mpl.rcParams['pdf.use14corefonts'] = True
+mpl.rcParams['axes.unicode_minus']=False
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as font_manager
+import warnings
+
+warnings.filterwarnings("ignore")
 
 def get_parser():
     parser = argparse.ArgumentParser()
@@ -31,6 +46,22 @@ def get_parser():
         type=int,
         default=100,
         help='Fraction of perturbations to be included in mean LFC, pval calculation, 1 - 100; Default: 100')
+    parser.add_argument('--ctrls-num',
+        type=int, 
+        default=4,
+        help='Number of control guides to be included in a random set')
+    parser.add_argument('--min-pert',
+        type=int,
+        default=3,
+        help='Minimum number of perturbations for a gene to be included in the volcano plot')
+    parser.add_argument('--max-pert',
+        type=int,
+        default=8,
+        help='Maximum number of perturbations for a gene to be included in the volcano plot')
+    parser.add_argument('--label-num',
+        type=int,
+        default=3,
+        help='Number of genes to be labeled on the plot')
     return parser
 
 '''
@@ -86,13 +117,74 @@ def calc_hypergeom_scores(merged, st_in, ge, frac):
         g_p_val[g] = op_lfcs+'_'+str(avg_lfc)+'_'+op_p_vals+'_'+str(avg_p_val)+'_'+guide_list+'_'+all_ranks
     return g_p_val
 
+def generate_chip(chip,num):
+    print 'Generating temp chip file...'
+    ctrls = chip[chip['Gene Symbol'].str.startswith('NO_CURRENT')]
+    new_chip = chip[~chip['Gene Symbol'].str.startswith('NO_CURRENT')]
+    new_chip = new_chip[['Guide Sequence','Gene Symbol']]
+    random_assign = []
+    for x in range(1,(len(ctrls)/num)+1):
+        random_assign.extend([x]*num)
+    ctrls.index = range(0,len(ctrls))
+    ctrls = ctrls.ix[0:len(random_assign)-1,]
+    ctrls['random_assign'] = random_assign
+    new_ctrl = pd.DataFrame()
+    for i in range(1,(len(ctrls)/num)+1):
+        ra_df = ctrls[ctrls['random_assign'] == i]
+        ra_df['Gene Symbol'] = 'NO_CURRENT_'+str(i)
+        if len(ra_df) == num:
+            new_ctrl = new_ctrl.append(ra_df)
+    new_ctrl = new_ctrl[['Guide Sequence','Gene Symbol']]
+    new_chip = new_chip.append(new_ctrl)
+    return new_chip
+
+def plot_volcano(outputfile,min_pert,max_pert,label_num,c):
+    print 'Generating volcano plot...'
+    output_df = pd.read_table(outputfile)
+    output_df = output_df[(output_df['Number of perturbations']>=min_pert)&(output_df['Number of perturbations']<=max_pert)]
+    ctrls = output_df[output_df['Gene Symbol'].str.contains('NO_CURRENT')]
+    fig,ax = plt.subplots()
+    ax.scatter(output_df['Average LFC'],output_df['Average -log(p-values)'],color='black',zorder=1)
+    ax.scatter(ctrls['Average LFC'],ctrls['Average -log(p-values)'],color='gray',zorder=2)
+    ax.set_title(c,fontname="Helvetica",fontsize=12)
+    ax.set_xlabel('Average fold change(log2)',fontname="Helvetica",fontsize=12)
+    ax.set_ylabel('Average p-value(-log10)',fontname="Helvetica",fontsize=12)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.yaxis.set_ticks_position('left')
+    ax.xaxis.set_ticks_position('bottom')
+    for tick in ax.get_xticklabels():
+        tick.set_fontname('Helvetica')
+        tick.set_fontsize(12)
+    for tick in ax.get_yticklabels():
+        tick.set_fontname('Helvetica')
+        tick.set_fontsize(12)    
+    output_df = output_df.sort(columns='Average LFC',ascending=False)
+    color_list = plt.cm.Set2(np.linspace(0, 1, 12))
+    plt_labels = []
+    color_index = 0
+    top_hits = output_df.head(label_num)
+    for i,r in top_hits.iterrows():
+        plt_labels.append(ax.scatter(r['Average LFC'],r['Average -log(p-values)'],c=color_list[color_index],s=50))
+        color_index+=1
+    legend1 = plt.legend(plt_labels,list(top_hits['Gene Symbol']),loc='lower right',fontsize=12,scatterpoints=1)
+    ax.add_artist(legend1)
+    plt_labels = []
+    bottom_hits = output_df.tail(label_num)
+    for i,r in bottom_hits.iterrows():
+        plt_labels.append(ax.scatter(r['Average LFC'],r['Average -log(p-values)'],c=color_list[color_index],s=50))
+        color_index+=1
+    legend2 = plt.legend(plt_labels,list(bottom_hits['Gene Symbol']),loc='lower left',fontsize=12,scatterpoints=1)    
+    ax.add_artist(legend2)
+    fig.savefig(o_folder+'/'+c+'.pdf')
+    return 1
 
 if __name__ == '__main__':
     args = get_parser().parse_args()
     inputfile = args.input_file
     input_df = pd.read_table(inputfile)
     cols = list(input_df.columns)[1:]
-    cols = [re.sub('[^a-zA-Z0-9 \n\.]', '_', x) for x in cols]
+    cols = [re.sub('[\s+\.]', '_', x) for x in cols]
     cols.insert(0,'Guide Sequence')
     input_df.columns = cols
     cols_iter = cols[1:]
@@ -102,10 +194,16 @@ if __name__ == '__main__':
     ref.columns = ref_colnames
     include = args.sing_pert
     frac = args.fraction
+    num = args.ctrls_num
+    min_pert = args.min_pert
+    max_pert = args.max_pert
+    label_num = args.label_num
     inputname = inputfile.split('/')[-1]
+    ref = generate_chip(ref,num)
     o_folder = 'Volcano-plots_'+inputname[:-4]+'_'+str(datetime.now().strftime("%y-%m-%d-%H-%M-%S"))
     if not os.path.exists(o_folder):
         os.makedirs(o_folder)
+    ref.to_csv(o_folder+'/temp_chip_file.txt',sep='\t',index=False)
     for ci,c in enumerate(cols_iter):
         outputfile = o_folder+'/'+c+'_'+str(frac)+'_'+str(datetime.now().strftime("%y-%m-%d-%H-%M"))+'.txt'
         st_in = input_df[['Guide Sequence',c]]
@@ -140,12 +238,13 @@ if __name__ == '__main__':
                         w.writerow((g, avg_lfc, avg_p_val, len(in_lfcs.split(';')), guide_list, in_lfcs, ranks_n, n_p_vals, ranks_p, p_p_vals))
                 else:
                     w.writerow((g, avg_lfc, avg_p_val, len(in_lfcs.split(';')), guide_list, in_lfcs, ranks_n, n_p_vals, ranks_p, p_p_vals))  
+        val = plot_volcano(outputfile,min_pert,max_pert,label_num,c)
     with open(o_folder+'/README.txt','w') as o:
         w = csv.writer(o,delimiter='\t')
-        w.writerow((['Code Version: 1.5.4']))
+        w.writerow((['Code Version: 2.3']))
         w.writerow((['Input file:'+inputfile]))
         w.writerow((['Chip file:'+args.chip_file]))
         w.writerow((['Output folder:'+o_folder]))
         w.writerow((['Fraction of perturbations for mean p-value, LFC:'+str(frac)]))
-                
+                    
 
