@@ -134,8 +134,9 @@ def generate_chip(chip,num):
         ra_df['Gene Symbol'] = 'NO_CURRENT_'+str(i)
         if len(ra_df) == num:
             new_ctrl = new_ctrl.append(ra_df)
-    new_ctrl = new_ctrl[['Guide Sequence','Gene Symbol']]
-    new_chip = new_chip.append(new_ctrl)
+    if len(new_ctrl) > 0:
+        new_ctrl = new_ctrl[['Guide Sequence','Gene Symbol']]
+        new_chip = new_chip.append(new_ctrl)
     return new_chip
 
 def plot_volcano(outputfile,min_pert,max_pert,label_num,c):
@@ -160,7 +161,7 @@ def plot_volcano(outputfile,min_pert,max_pert,label_num,c):
         tick.set_fontname('Helvetica')
         tick.set_fontsize(12)    
     output_df = output_df.sort(columns='Average LFC',ascending=False)
-    color_list = plt.cm.Set2(np.linspace(0, 1, 12))
+    color_list = plt.cm.Set1(np.linspace(0, 1, 12))
     plt_labels = []
     color_index = 0
     top_hits = output_df.head(label_num)
