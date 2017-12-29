@@ -71,11 +71,11 @@ Return Value: Sorted and re-index dataframe
 '''
 def sort_reindex(df, col, direction):
     if direction == 'P' or direction == 'p':
-        df = df.sort(columns=col, ascending=False)
+        df = df.sort_values(by=col, ascending=False)
         df.index = range(0, len(df))
         #df['Rank'] = map(lambda x:x+1, range(len(df)))
     elif direction == 'N' or direction == 'n':
-        df = df.sort(columns=col, ascending=True)
+        df = df.sort_values(by=col, ascending=True)
         df.index = range(0, len(df))
     else:
         print 'Please enter a relevant direction; P for positive and N for negative'
@@ -160,7 +160,7 @@ def plot_volcano(outputfile,min_pert,max_pert,label_num,c):
     for tick in ax.get_yticklabels():
         tick.set_fontname('Helvetica')
         tick.set_fontsize(12)    
-    output_df = output_df.sort(columns='Average LFC',ascending=False)
+    output_df = output_df.sort_values(by='Average LFC',ascending=False)
     color_list = plt.cm.Set1(np.linspace(0, 1, 12))
     plt_labels = []
     color_index = 0
@@ -242,7 +242,7 @@ if __name__ == '__main__':
         val = plot_volcano(outputfile,min_pert,max_pert,label_num,c)
     with open(o_folder+'/README.txt','w') as o:
         w = csv.writer(o,delimiter='\t')
-        w.writerow((['Code Version: 2.3']))
+        w.writerow((['Code Version: 2.3.2']))
         w.writerow((['Input file:'+inputfile]))
         w.writerow((['Chip file:'+args.chip_file]))
         w.writerow((['Output folder:'+o_folder]))
