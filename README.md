@@ -1,5 +1,5 @@
 <b>Updates</b>:
-2.3.2: Requires pandas-0.17.0 or higher
+<p>2.3.2: Requires pandas-0.17.0 or higher</p>
 
 Requires:
 Python 2.7;
