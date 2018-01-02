@@ -1,4 +1,4 @@
-Updates:
+<b>Updates</b>:
 2.3.2: Requires pandas-0.17.0 or higher
 
 Requires:
