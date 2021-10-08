@@ -17,7 +17,7 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 from math import log10
-import csv, argparse, sys, re, traceback, os
+import csv, argparse, sys, re, traceback
 from datetime import datetime
 from decimal import Decimal
 import matplotlib as mpl
@@ -29,7 +29,6 @@ mpl.rcParams['ps.useafm'] = True
 mpl.rcParams['pdf.use14corefonts'] = True
 mpl.rcParams['axes.unicode_minus']=False
 import matplotlib.pyplot as plt
-import matplotlib.font_manager as font_manager
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -49,6 +48,7 @@ def get_parser():
     parser.add_argument('--disp-onesite', type=str, default='Y', choices=['Y','N'],help='Y to include One_Non-Gene_Site controls in plot')
     return parser
 
+
 '''
 Sorts a data frame on the column specified and re-indexes
 Argument: Dataframe, column to sort on, direction of sorting
@@ -56,16 +56,16 @@ Return Value: Sorted and re-index dataframe
 '''
 def sort_reindex(df, col, direction):
     if direction == 'P' or direction == 'p':
-        df = df.sort_values(by=col, ascending=False)
+        df = df.sort(columns=col, ascending=False)
         df.index = range(0, len(df))
-        #df['Rank'] = map(lambda x:x+1, range(len(df)))
     elif direction == 'N' or direction == 'n':
-        df = df.sort_values(by=col, ascending=True)
+        df = df.sort(columns=col, ascending=True)
         df.index = range(0, len(df))
     else:
-        print('Please enter a relevant direction; P for positive and N for negative')
+        print 'Please enter a relevant direction; P for positive and N for negative'
         sys.exit(1)
     return df
+
 
 def calc_hypergeom_scores(merged, st_in, ge, frac):
     grouped = merged.groupby('Gene Symbol')
@@ -91,7 +91,6 @@ def calc_hypergeom_scores(merged, st_in, ge, frac):
         rank.sort()
         lfcs = list(ge_df['Score'])
         op_lfcs = ';'.join(str(round(l,2)) for l in lfcs)
-        #op_lfcs = ';'.join([str(l) for l in lfcs])
         all_ranks = ';'.join(str(r) for r in rank)
         p_values = [-log10(stats.hypergeom.pmf(rank.index(x)+1, tot_sps, length_sps, x)) for x in rank]
         p_values.sort(reverse=True)
@@ -115,44 +114,52 @@ def get_random_sets(df, num, label):
     for i in list(set(random_assign)):
         ra_df = df[df['random_assign'] == i]
         ra_df['Gene Symbol'] = label+'_'+str(i)
-        #if len(ra_df) == num:
         new_df = new_df.append(ra_df)
     new_df = new_df[['Guide Sequence','Gene Symbol']]
     return new_df
 
 
-def generate_chip(chip,num):
-    print('Generating temp chip file...')
+def generate_chip(chip, num):
+    print 'Generating temp chip file...'
     nosite_ctrls = chip[chip['Gene Symbol'].str.startswith('NO_SITE')]
-    nongene_ctrls = chip[chip['Gene Symbol'].str.startswith('ONE_NON-GENE_SITE')]
-    new_chip = chip[(~chip['Gene Symbol'].str.startswith('NO_SITE')) & (~chip['Gene Symbol'].str.startswith('ONE_NON-GENE_SITE'))]
+    nongene_ctrls = chip[(chip['Gene Symbol'].str.startswith('ONE_NON-GENE_SITE'))|(chip['Gene Symbol'].str.startswith('ONE_INTERGENIC_SITE'))]
+    new_chip = chip[(~chip['Gene Symbol'].str.startswith('NO_SITE')) & (~chip['Gene Symbol'].str.startswith('ONE_NON-GENE_SITE')) & (~chip['Gene Symbol'].str.startswith('ONE_INTERGENIC_SITE'))]
     new_chip = new_chip[['Guide Sequence','Gene Symbol']]
-    if len(nosite_ctrls) != 0:
+    if len(nosite_ctrls) > num:
         nosite_random = get_random_sets(nosite_ctrls, num, 'NO_SITE')
         if len(nosite_random) > 0:
             new_chip = new_chip.append(nosite_random)
-    if len(nongene_ctrls) != 0:
-        nongene_random = get_random_sets(nongene_ctrls, num, 'ONE_NON-GENE_SITE')
+    elif (len(nosite_ctrls) != 0) & (len(nosite_ctrls) <= num):
+        new_chip = new_chip.append(nosite_ctrls)
+    if len(nongene_ctrls) > num:
+        if list(set(nongene_ctrls['Gene Symbol'].str.contains('ONE_NON-GENE_SITE')))[0]:
+            nongene_random = get_random_sets(nongene_ctrls, num, 'ONE_NON-GENE_SITE')
+        else:
+            nongene_random = get_random_sets(nongene_ctrls, num, 'ONE_INTERGENIC_SITE')
         if len(nongene_random) > 0:
             new_chip = new_chip.append(nongene_random)
+    elif (len(nongene_ctrls) != 0) & (len(nongene_ctrls) <= num):
+        new_chip = new_chip.append(nongene_ctrls)
     return new_chip
 
+
 def plot_volcano(outputfile, min_pert, max_pert,label_num, c, disp_nosite, disp_onesite):
-    print('Generating volcano plot...')
+    print 'Generating volcano plot...'
     output_df = pd.read_table(outputfile)
     output_df = output_df[(output_df['Number of perturbations']>=min_pert)&(output_df['Number of perturbations']<=max_pert)]
     nosite_ctrls = output_df[output_df['Gene Symbol'].str.contains('NO_SITE')]
-    nongene_ctrls = output_df[output_df['Gene Symbol'].str.contains('ONE_NON-GENE_SITE')]
+    nongene_ctrls = output_df[(output_df['Gene Symbol'].str.contains('ONE_NON-GENE_SITE'))|(output_df['Gene Symbol'].str.contains('ONE_INTERGENIC_SITE'))]
     fig = plt.figure()
     ax = plt.subplot2grid((1,3),(0,0), colspan=2)
     ax1 = plt.subplot2grid((1,3),(0,2))
     ax.scatter(output_df['Average LFC'],output_df['Average -log(p-values)'],color='black',zorder=1,s=30)
     legend_elements = []
-    if disp_onesite == 'Y':
+    if (disp_onesite == 'Y') & (len(nongene_ctrls) > 0):
+        label = nongene_ctrls['Gene Symbol'].values[0].rsplit('_', 1)[0]
         ax.scatter(nongene_ctrls['Average LFC'], nongene_ctrls['Average -log(p-values)'], color='lightgrey', zorder=3,s=30)
         legend_elements.append(Rectangle((0, 0), 1, 1, fc="w", fill=False, edgecolor='none', linewidth=0, label='Controls'))
-        legend_elements.append(Line2D([],[], marker='o', color='lightgrey', label='ONE_NON-GENE_SITE',linestyle='None'))
-    if disp_nosite == 'Y':
+        legend_elements.append(Line2D([],[], marker='o', color='lightgrey', label=label,linestyle='None'))
+    if (disp_nosite == 'Y') & (len(nosite_ctrls) > 0):
         ax.scatter(nosite_ctrls['Average LFC'],nosite_ctrls['Average -log(p-values)'],color='dimgrey',zorder=2,s=30)
         if len(legend_elements) == 0:
             legend_elements.append(Rectangle((0, 0), 1, 1, fc="w", fill=False, edgecolor='none', linewidth=0, label='Controls'))
@@ -195,7 +202,7 @@ def plot_volcano(outputfile, min_pert, max_pert,label_num, c, disp_nosite, disp_
     ax1.spines['left'].set_visible(False)
     ax1.tick_params(axis='both', which='both', labelbottom=False, labelleft=False, bottom=False, left=False, top=False, right=False)
     plt.tight_layout()
-    fig.savefig(os.path.dirname(os.path.abspath(outputfile))+'/'+c+'.pdf')
+    fig.savefig(c+'.pdf')
     return 1
 
 
@@ -211,6 +218,7 @@ def input_check(input_df):
 def read_args(args):
     inputfile = args.input_file
     input_df = pd.read_table(inputfile)
+    input_df = input_df.dropna(axis=1, how='all')
     cols = list(input_df.columns)[1:]
     cols = [re.sub('[\s+\.]', '_', x) for x in cols]
     cols.insert(0, 'Guide Sequence')
@@ -228,22 +236,23 @@ def read_args(args):
     label_num = args.label_num
     disp_nosite = args.disp_nosite
     disp_onesite = args.disp_onesite
-    return inputfile, input_df, ref, include, frac, num, min_pert, max_pert, label_num, disp_nosite, disp_onesite
+    return input_df, ref, include, frac, num, min_pert, max_pert, label_num, disp_nosite, disp_onesite
 
 
 if __name__ == '__main__':
     try:
         args = get_parser().parse_args()
-        inputfile, input_df, ref, include, frac, num, min_pert, max_pert, label_num, disp_nosite, disp_onesite = read_args(args)
+        input_df, ref, include, frac, num, min_pert, max_pert, label_num, disp_nosite, disp_onesite = read_args(args)
         cols_iter = list(input_df.columns)[1:]
-        inputname = inputfile.split('/')[-1]
         ref = generate_chip(ref,num)
+        '''
         o_folder = 'Volcano-plots_'+inputname[:-4]+'_'+str(datetime.now().strftime("%y-%m-%d-%H-%M-%S"))
         if not os.path.exists(o_folder):
             os.makedirs(o_folder)
-        ref.to_csv(o_folder+'/temp_chip_file.txt',sep='\t',index=False)
+        '''
+        ref.to_csv('temp_chip_file.txt',sep='\t',index=False)
         for ci,c in enumerate(cols_iter):
-            outputfile = o_folder+'/'+c+'_'+str(frac)+'_'+str(datetime.now().strftime("%y-%m-%d-%H-%M"))+'.txt'
+            outputfile = c+'_'+str(frac)+'_'+str(datetime.now().strftime("%y-%m-%d-%H-%M"))+'.txt'
             st_in = input_df[['Guide Sequence',c]]
             st_in = st_in.rename(columns={c:'Score'})
             merged = pd.merge(st_in, ref, on='Guide Sequence')
@@ -260,7 +269,7 @@ if __name__ == '__main__':
             with open(outputfile,'w') as o:
                 w = csv.writer(o, delimiter='\t', lineterminator='\n')
                 w.writerow(('Gene Symbol', 'Average LFC', 'Average -log(p-values)', 'Number of perturbations', 'Perturbations', 'Individual LFCs', 'Ascending ranks','Individual ascending -log(p-values)', 'Descending ranks', 'Individual descending -log(p-values)'))
-                print('Analyzing '+c)
+                print 'Analyzing '+c
                 for g in ge:
                     in_lfcs, avg_lfc_p, p_p_vals, avg_p_val, guide_list, ranks_p = g_p_val_P[g].split('_')
                     in_lfcs, avg_lfc_n, n_p_vals, avg_n_val, guide_list, ranks_n = g_p_val_N[g].split('_')
